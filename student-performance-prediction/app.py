@@ -4,17 +4,46 @@ from flask_cors import CORS
 from model import predict_performance
 
 app = Flask(__name__)
-
-# Allow requests from InfinityFree frontend
 CORS(app)
 
+# ================= DATABASE CONNECTION =================
 
 # ================= SEARCH COURSES =================
 
 @app.route("/search_courses")
 def search_courses():
 
-    return jsonify([])
+    query = request.args.get("query", "")
+    level = request.args.get("level", "")
+
+    conn = get_connection()
+
+    if conn is None:
+        return jsonify([])
+
+    cursor = conn.cursor()
+
+    sql = """
+    SELECT course_name
+    FROM courses
+    JOIN academic_levels
+    ON courses.level_id = academic_levels.id
+    WHERE academic_levels.level_name=%s
+    AND course_name ILIKE %s
+    """
+
+    cursor.execute(sql, (level, f"%{query}%"))
+
+    rows = cursor.fetchall()
+
+    data = []
+    for row in rows:
+        data.append({"course_name": row[0]})
+
+    cursor.close()
+    conn.close()
+
+    return jsonify(data)
 
 
 # ================= SEARCH SUBJECTS =================
@@ -22,7 +51,37 @@ def search_courses():
 @app.route("/search_subjects")
 def search_subjects():
 
-    return jsonify([])
+    query = request.args.get("query", "")
+    course = request.args.get("course", "")
+
+    conn = get_connection()
+
+    if conn is None:
+        return jsonify([])
+
+    cursor = conn.cursor()
+
+    sql = """
+    SELECT subject_name
+    FROM subjects
+    JOIN courses
+    ON subjects.course_id = courses.id
+    WHERE courses.course_name=%s
+    AND subject_name ILIKE %s
+    """
+
+    cursor.execute(sql, (course, f"%{query}%"))
+
+    rows = cursor.fetchall()
+
+    data = []
+    for row in rows:
+        data.append({"subject_name": row[0]})
+
+    cursor.close()
+    conn.close()
+
+    return jsonify(data)
 
 
 # ================= PREDICT =================
@@ -41,6 +100,8 @@ def predict():
 
     subjects = {}
     subject_marks = []
+
+    # ================= COLLECT SUBJECT MARKS =================
 
     for key in request.form:
 
@@ -62,16 +123,15 @@ def predict():
     if len(subject_marks) < 3:
         return "Enter at least 3 subjects"
 
+    # ================= CALCULATIONS =================
+
     avg_marks = int(sum(subject_marks) / len(subject_marks))
 
     # ================= ML PREDICTION =================
 
-    try:
-        final_score = float(
-            predict_performance(course, avg_marks, study_hours)
-        )
-    except Exception as e:
-        return f"Prediction error: {str(e)}"
+    final_score = float(
+        predict_performance(course, avg_marks, study_hours)
+    )
 
     expected_mark = round(final_score, 2)
 
@@ -87,6 +147,7 @@ def predict():
         prediction = "Average 🙂"
     else:
         prediction = "Needs Improvement ⚠️"
+
 
     # ================= IMPROVEMENT PLAN =================
 
@@ -113,9 +174,13 @@ def predict():
             "expected": expected
         }
 
+
     # ================= WEEKLY TIMETABLE =================
 
-    days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+    days = [
+        "Monday","Tuesday","Wednesday",
+        "Thursday","Friday","Saturday","Sunday"
+    ]
 
     weekly_timetable = {}
 
@@ -127,10 +192,13 @@ def predict():
 
         if mark < 45:
             weak.append(subject)
+
         elif mark < 60:
             medium.append(subject)
+
         else:
             strong.append(subject)
+
 
     for day in days:
 
@@ -155,7 +223,10 @@ def predict():
             for subject in strong:
                 weekly_timetable[day].append(f"{subject} - 1 hr")
 
-    weakest_subject = min(subjects, key=subjects.get) if subjects else None
+    weakest_subject = min(subjects, key=subjects.get)
+
+
+    # ================= RETURN RESULT PAGE =================
 
     return render_template(
         "result.html",
