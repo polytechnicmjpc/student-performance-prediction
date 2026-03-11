@@ -10,6 +10,13 @@ app = Flask(__name__)
 # Allow frontend requests
 CORS(app)
 
+def get_connection():
+    return mysql.connector.connect(
+        host="sql201.infinityfree.com",
+        user="if0_41338440",
+        password="copycat2026",
+        database="if0_41338440_student_prediction"
+    )
 
 # ================= SEARCH COURSES =================
 
