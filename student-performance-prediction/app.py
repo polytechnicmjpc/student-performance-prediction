@@ -2,22 +2,28 @@ import mysql.connector
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from model import predict_performance
+import os
 
 app = Flask(__name__)
 
-# Allow requests from frontend (InfinityFree)
+# Allow requests from InfinityFree frontend
 CORS(app)
 
 
 # ================= DATABASE CONNECTION =================
 
 def get_connection():
-    return mysql.connector.connect(
-        host="sql201.infinityfree.com",
-        user="if0_41338440",
-        password="copycat2026",
-        database="if0_41338440_student_prediction"
-    )
+    try:
+        conn = mysql.connector.connect(
+            host="sql201.infinityfree.com",
+            user="if0_41338440",
+            password="copycat2026",
+            database="if0_41338440_student_prediction"
+        )
+        return conn
+    except mysql.connector.Error as err:
+        print("Database connection error:", err)
+        return None
 
 
 # ================= SEARCH COURSES =================
@@ -29,7 +35,11 @@ def search_courses():
     level = request.args.get("level", "")
 
     conn = get_connection()
-    cursor = conn.cursor()
+
+    if conn is None:
+        return jsonify([])
+
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
     SELECT course_name
@@ -43,12 +53,10 @@ def search_courses():
     cursor.execute(sql, (level, f"%{query}%"))
     data = cursor.fetchall()
 
-    result = [{"course_name": row[0]} for row in data]
-
     cursor.close()
     conn.close()
 
-    return jsonify(result)
+    return jsonify(data)
 
 
 # ================= SEARCH SUBJECTS =================
@@ -60,7 +68,11 @@ def search_subjects():
     course = request.args.get("course", "")
 
     conn = get_connection()
-    cursor = conn.cursor()
+
+    if conn is None:
+        return jsonify([])
+
+    cursor = conn.cursor(dictionary=True)
 
     sql = """
     SELECT subject_name
@@ -74,12 +86,10 @@ def search_subjects():
     cursor.execute(sql, (course, f"%{query}%"))
     data = cursor.fetchall()
 
-    result = [{"subject_name": row[0]} for row in data]
-
     cursor.close()
     conn.close()
 
-    return jsonify(result)
+    return jsonify(data)
 
 
 # ================= PREDICT =================
@@ -92,7 +102,7 @@ def predict():
 
     study_hours = request.form.get("study_hours")
 
-    if study_hours is None or study_hours == "":
+    if not study_hours:
         return "Study hours required"
 
     study_hours = float(study_hours)
@@ -108,7 +118,7 @@ def predict():
 
             mark = request.form.get(key)
 
-            if mark and mark != "":
+            if mark:
                 mark = float(mark)
 
                 subject_marks.append(mark)
@@ -122,10 +132,12 @@ def predict():
     if len(subject_marks) < 3:
         return "Enter at least 3 subjects"
 
+
     # ================= CALCULATIONS =================
 
     avg_marks = int(sum(subject_marks) / len(subject_marks))
     max_marks = max(subject_marks)
+
 
     # ================= ML PREDICTION =================
 
@@ -137,6 +149,7 @@ def predict():
         return f"Prediction error: {str(e)}"
 
     expected_mark = round(final_score, 2)
+
 
     # ================= RESULT LABEL =================
 
@@ -151,31 +164,32 @@ def predict():
     else:
         prediction = "Needs Improvement ⚠️"
 
+
     # ================= SAVE STUDENT DATA =================
 
     try:
 
         conn = get_connection()
-        cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            INSERT INTO students (course, avg_marks, study_hours, final_score)
-            VALUES (%s,%s,%s,%s)
-            """,
-            (course, avg_marks, study_hours, final_score)
-        )
+        if conn:
+            cursor = conn.cursor()
 
-        conn.commit()
+            cursor.execute(
+                """
+                INSERT INTO students (course, avg_marks, study_hours, final_score)
+                VALUES (%s,%s,%s,%s)
+                """,
+                (course, avg_marks, study_hours, final_score)
+            )
+
+            conn.commit()
+
+            cursor.close()
+            conn.close()
 
     except mysql.connector.Error as err:
-
         print("Database Error:", err)
 
-    finally:
-
-        cursor.close()
-        conn.close()
 
     # ================= IMPROVEMENT PLAN =================
 
@@ -202,16 +216,12 @@ def predict():
             "expected": expected
         }
 
+
     # ================= WEEKLY TIMETABLE =================
 
     days = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday"
+        "Monday","Tuesday","Wednesday",
+        "Thursday","Friday","Saturday","Sunday"
     ]
 
     weekly_timetable = {}
@@ -231,6 +241,7 @@ def predict():
         else:
             strong.append(subject)
 
+
     for day in days:
 
         weekly_timetable[day] = []
@@ -246,15 +257,17 @@ def predict():
         for subject in weak:
             weekly_timetable[day].append(f"{subject} - 2 hrs")
 
-        if day in ["Monday", "Wednesday", "Friday"]:
+        if day in ["Monday","Wednesday","Friday"]:
             for subject in medium:
                 weekly_timetable[day].append(f"{subject} - 1.5 hrs")
 
-        if day in ["Tuesday", "Thursday"]:
+        if day in ["Tuesday","Thursday"]:
             for subject in strong:
                 weekly_timetable[day].append(f"{subject} - 1 hr")
 
+
     weakest_subject = min(subjects, key=subjects.get)
+
 
     # ================= RETURN RESULT PAGE =================
 
@@ -262,7 +275,7 @@ def predict():
         "result.html",
         level=level,
         course=course,
-        final_score=round(final_score, 2),
+        final_score=round(final_score,2),
         expected_mark=expected_mark,
         prediction=prediction,
         improvement_plan=improvement_plan,
@@ -274,4 +287,5 @@ def predict():
 # ================= RUN APP =================
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
