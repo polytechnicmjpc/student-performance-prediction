@@ -1,12 +1,26 @@
+
+import psycopg2
 import os
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from model import predict_performance
 
 app = Flask(__name__)
+
+# Allow frontend requests
 CORS(app)
 
 # ================= DATABASE CONNECTION =================
+
+def get_connection():
+    try:
+        DATABASE_URL = os.environ.get("DATABASE_URL")
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    except Exception as e:
+        print("Database connection error:", e)
+        return None
+
 
 # ================= SEARCH COURSES =================
 
@@ -84,7 +98,7 @@ def search_subjects():
     return jsonify(data)
 
 
-# ================= PREDICT =================
+# ================= PREDICT RESULT =================
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -101,41 +115,43 @@ def predict():
     subjects = {}
     subject_marks = []
 
-    # ================= COLLECT SUBJECT MARKS =================
+    # ===== Collect subject marks =====
 
-    for key in request.form:
+    for key in request.form.keys():
 
-        if "subject_mark_" in key:
+        if key.startswith("subject_mark_"):
+
+            index = key.split("_")[-1]
 
             mark = request.form.get(key)
+            subject_name = request.form.get(f"subject_name_{index}")
 
-            if mark:
+            if mark and subject_name:
+
                 mark = float(mark)
 
                 subject_marks.append(mark)
-
-                index = key.split("_")[-1]
-                subject_name = request.form.get(f"subject_name_{index}")
-
-                if subject_name:
-                    subjects[subject_name] = mark
+                subjects[subject_name] = mark
 
     if len(subject_marks) < 3:
         return "Enter at least 3 subjects"
 
-    # ================= CALCULATIONS =================
+    # ===== Calculate average =====
 
     avg_marks = int(sum(subject_marks) / len(subject_marks))
 
-    # ================= ML PREDICTION =================
+    # ===== ML Prediction =====
 
-    final_score = float(
-        predict_performance(course, avg_marks, study_hours)
-    )
+    try:
+        final_score = float(
+            predict_performance(course, avg_marks, study_hours)
+        )
+    except Exception as e:
+        return f"Prediction error: {str(e)}"
 
     expected_mark = round(final_score, 2)
 
-    # ================= RESULT LABEL =================
+    # ===== Performance Label =====
 
     if final_score >= 65:
         prediction = "Excellent 🏆"
@@ -148,7 +164,6 @@ def predict():
     else:
         prediction = "Needs Improvement ⚠️"
 
-
     # ================= IMPROVEMENT PLAN =================
 
     improvement_plan = {}
@@ -158,12 +173,15 @@ def predict():
         if mark < 30:
             extra_hours = 2
             expected = "45+"
+
         elif mark < 45:
             extra_hours = 1.5
             expected = "50+"
+
         elif mark < 60:
             extra_hours = 1
             expected = "65+"
+
         else:
             extra_hours = 0.5
             expected = "70+"
@@ -174,8 +192,7 @@ def predict():
             "expected": expected
         }
 
-
-    # ================= WEEKLY TIMETABLE =================
+    # ================= WEEKLY STUDY PLAN =================
 
     days = [
         "Monday","Tuesday","Wednesday",
@@ -198,7 +215,6 @@ def predict():
 
         else:
             strong.append(subject)
-
 
     for day in days:
 
@@ -225,8 +241,7 @@ def predict():
 
     weakest_subject = min(subjects, key=subjects.get)
 
-
-    # ================= RETURN RESULT PAGE =================
+    # ================= SHOW RESULT PAGE =================
 
     return render_template(
         "result.html",
