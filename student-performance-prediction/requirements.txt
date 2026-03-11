@@ -1,7 +1,8 @@
 Flask
 flask-cors
 gunicorn
-import mysql.connector
 numpy
 scikit-learn
+import mysql.connector
+
 
