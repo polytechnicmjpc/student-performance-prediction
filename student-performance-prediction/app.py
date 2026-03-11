@@ -1,8 +1,8 @@
-import mysql.connector
-from flask import Flask, render_template, request, jsonify
+import psycopg2
+import os
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from model import predict_performance
-import os
 
 app = Flask(__name__)
 
@@ -13,7 +13,14 @@ CORS(app)
 # ================= DATABASE CONNECTION =================
 
 def get_connection():
-    
+    try:
+        conn = psycopg2.connect(os.environ.get("postgresql://student_user:O7L2FrZkng9tYHZrt4zCSZ9Pwm9SPOAS@dpg-d6on84aa214c73bf38qg-a/student_prediction"))
+        return conn
+    except Exception as e:
+        print("Database connection error:", e)
+        return None
+
+
 # ================= SEARCH COURSES =================
 
 @app.route("/search_courses")
@@ -27,7 +34,7 @@ def search_courses():
     if conn is None:
         return jsonify([])
 
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     sql = """
     SELECT course_name
@@ -39,7 +46,12 @@ def search_courses():
     """
 
     cursor.execute(sql, (level, f"%{query}%"))
-    data = cursor.fetchall()
+
+    rows = cursor.fetchall()
+
+    data = []
+    for row in rows:
+        data.append({"course_name": row[0]})
 
     cursor.close()
     conn.close()
@@ -60,7 +72,7 @@ def search_subjects():
     if conn is None:
         return jsonify([])
 
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     sql = """
     SELECT subject_name
@@ -72,7 +84,12 @@ def search_subjects():
     """
 
     cursor.execute(sql, (course, f"%{query}%"))
-    data = cursor.fetchall()
+
+    rows = cursor.fetchall()
+
+    data = []
+    for row in rows:
+        data.append({"subject_name": row[0]})
 
     cursor.close()
     conn.close()
@@ -123,7 +140,6 @@ def predict():
     # ================= CALCULATIONS =================
 
     avg_marks = int(sum(subject_marks) / len(subject_marks))
-    max_marks = max(subject_marks)
 
 
     # ================= ML PREDICTION =================
@@ -159,6 +175,7 @@ def predict():
         conn = get_connection()
 
         if conn is not None:
+
             cursor = conn.cursor()
 
             cursor.execute(
@@ -174,7 +191,7 @@ def predict():
             cursor.close()
             conn.close()
 
-    except mysql.connector.Error as err:
+    except Exception as err:
         print("Database Error:", err)
 
 
