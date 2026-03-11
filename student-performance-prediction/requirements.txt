@@ -1,9 +1,9 @@
-Flask
+flask
 flask-cors
-gunicorn
+mysql-connector-python
 numpy
 scikit-learn
-
+gunicorn
 
 
 
