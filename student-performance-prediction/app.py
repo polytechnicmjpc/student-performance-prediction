@@ -18,7 +18,8 @@ def get_connection():
             host="sql201.infinityfree.com",
             user="if0_41338440",
             password="copycat2026",
-            database="if0_41338440_student_prediction"
+            database="if0_41338440_student_prediction",
+            connection_timeout=5
         )
         return conn
     except mysql.connector.Error as err:
@@ -99,7 +100,6 @@ def predict():
 
     level = request.form.get("level")
     course = request.form.get("course")
-
     study_hours = request.form.get("study_hours")
 
     if not study_hours:
@@ -171,7 +171,7 @@ def predict():
 
         conn = get_connection()
 
-        if conn:
+        if conn is not None:
             cursor = conn.cursor()
 
             cursor.execute(
