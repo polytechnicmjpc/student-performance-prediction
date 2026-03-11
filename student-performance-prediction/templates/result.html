@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<title>Prediction Result</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='result.css') }}">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>🎯 Student Performance Result</h2>
+
+<!-- ================= RESULT TABLE ================= -->
+
+<table>
+
+<tr>
+<th>Field</th>
+<th>Current Marks</th>
+<th>Improvement Plan</th>
+<th>Expected Mark</th>
+</tr>
+
+<tr>
+<td>Academic Level</td>
+<td>{{ level }}</td>
+<td>-</td>
+<td>-</td>
+</tr>
+
+<tr>
+<td>Course</td>
+<td>{{ course }}</td>
+<td>-</td>
+<td>-</td>
+</tr>
+
+<tr>
+<td>Final Score</td>
+<td>{{ final_score }}</td>
+<td>{{ prediction }}</td>
+<td>-</td>
+</tr>
+
+<!-- ================= SUBJECT IMPROVEMENT PLAN ================= -->
+
+{% for subject, plan in improvement_plan.items() %}
+
+<tr>
+
+<td>{{ subject }}</td>
+
+<td>{{ plan.mark }}</td>
+
+<td>
+Extra Study: {{ plan.extra_hours }} hrs/day
+</td>
+
+<td>
+{{ plan.expected }}
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+
+<!-- ================= MOTIVATION ================= -->
+
+<div class="motivation">
+
+💡 Follow the plan daily to boost your next exam result!
+
+</div>
+
+
+<!-- ================= WEEKLY TIMETABLE ================= -->
+
+<h3>📅 Weekly Study Timetable</h3>
+
+<table>
+
+<tr>
+<th>Day</th>
+<th>Study Plan</th>
+</tr>
+
+{% for day, subjects in weekly_timetable.items() %}
+
+<tr>
+
+<td>{{ day }}</td>
+
+<td>
+
+{% for subject in subjects %}
+
+{{ subject }} <br>
+
+{% endfor %}
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+
+<!-- ================= WEAKEST SUBJECT ================= -->
+
+<div class="motivation">
+
+⚠️ Focus more on <b>{{ weakest_subject }}</b> to improve overall performance.
+
+</div>
+
+
+<!-- ================= BACK BUTTON ================= -->
+
+<div style="text-align:center; margin-top:25px;">
+
+<a href="https://your-infinityfree-domain.com/home.html">
+
+<button type="button" class="back-btn">
+
+⬅ Back to Home
+
+</button>
+
+</a>
+
+</div>
+
+</div>
+
+</body>
+</html>
