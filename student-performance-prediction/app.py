@@ -1,13 +1,21 @@
-
 import os
-from flask import Flask, request, jsonify, render_template
+import mysql.connector
+from flask import Flask, request, render_template
 from flask_cors import CORS
 from model import predict_performance
 
 app = Flask(__name__)
-
-# Allow frontend requests
 CORS(app)
+
+# ================= DATABASE CONNECTION =================
+
+def get_connection():
+    return mysql.connector.connect(
+        host="sql201.infinityfree.com",
+        user="if0_41338440",
+        password="copycat2026",
+        database="if0_41338440_student_prediction"
+    )
 
 # ================= PREDICT =================
 
@@ -16,7 +24,6 @@ def predict():
 
     level = request.form.get("level")
     course = request.form.get("course")
-
     study_hours = request.form.get("study_hours")
 
     if study_hours is None or study_hours == "":
@@ -94,8 +101,11 @@ def predict():
         print("Database Error:", err)
 
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            cursor.close()
+            conn.close()
+        except:
+            pass
 
     # ================= IMPROVEMENT PLAN =================
 
@@ -125,7 +135,6 @@ def predict():
     # ================= WEEKLY TIMETABLE =================
 
     days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
-
     weekly_timetable = {}
 
     weak = []
@@ -177,12 +186,9 @@ def predict():
         weakest_subject=weakest_subject
     )
 
-
-
 # ================= RUN APP =================
 
 if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 5000))
-
     app.run(host="0.0.0.0", port=port)
