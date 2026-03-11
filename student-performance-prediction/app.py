@@ -10,17 +10,6 @@ app = Flask(__name__)
 # Allow frontend requests
 CORS(app)
 
-# ================= DATABASE CONNECTION =================
-
-def get_connection():
-    try:
-        DATABASE_URL = os.environ.get("DATABASE_URL")
-        conn = psycopg2.connect(DATABASE_URL)
-        return conn
-    except Exception as e:
-        print("Database connection error:", e)
-        return None
-
 
 # ================= SEARCH COURSES =================
 
@@ -31,10 +20,6 @@ def search_courses():
     level = request.args.get("level", "")
 
     conn = get_connection()
-
-    if conn is None:
-        return jsonify([])
-
     cursor = conn.cursor()
 
     sql = """
@@ -43,21 +28,18 @@ def search_courses():
     JOIN academic_levels
     ON courses.level_id = academic_levels.id
     WHERE academic_levels.level_name=%s
-    AND course_name ILIKE %s
+    AND course_name LIKE %s
     """
 
     cursor.execute(sql, (level, f"%{query}%"))
+    data = cursor.fetchall()
 
-    rows = cursor.fetchall()
-
-    data = []
-    for row in rows:
-        data.append({"course_name": row[0]})
+    result = [{"course_name": row[0]} for row in data]
 
     cursor.close()
     conn.close()
 
-    return jsonify(data)
+    return jsonify(result)
 
 
 # ================= SEARCH SUBJECTS =================
@@ -69,10 +51,6 @@ def search_subjects():
     course = request.args.get("course", "")
 
     conn = get_connection()
-
-    if conn is None:
-        return jsonify([])
-
     cursor = conn.cursor()
 
     sql = """
@@ -81,33 +59,31 @@ def search_subjects():
     JOIN courses
     ON subjects.course_id = courses.id
     WHERE courses.course_name=%s
-    AND subject_name ILIKE %s
+    AND subject_name LIKE %s
     """
 
     cursor.execute(sql, (course, f"%{query}%"))
+    data = cursor.fetchall()
 
-    rows = cursor.fetchall()
-
-    data = []
-    for row in rows:
-        data.append({"subject_name": row[0]})
+    result = [{"subject_name": row[0]} for row in data]
 
     cursor.close()
     conn.close()
 
-    return jsonify(data)
+    return jsonify(result)
 
 
-# ================= PREDICT RESULT =================
+# ================= PREDICT =================
 
 @app.route("/predict", methods=["POST"])
 def predict():
 
     level = request.form.get("level")
     course = request.form.get("course")
+
     study_hours = request.form.get("study_hours")
 
-    if not study_hours:
+    if study_hours is None or study_hours == "":
         return "Study hours required"
 
     study_hours = float(study_hours)
@@ -115,43 +91,41 @@ def predict():
     subjects = {}
     subject_marks = []
 
-    # ===== Collect subject marks =====
+    for key in request.form:
 
-    for key in request.form.keys():
-
-        if key.startswith("subject_mark_"):
-
-            index = key.split("_")[-1]
+        if "subject_mark_" in key:
 
             mark = request.form.get(key)
-            subject_name = request.form.get(f"subject_name_{index}")
 
-            if mark and subject_name:
-
+            if mark and mark != "":
                 mark = float(mark)
 
                 subject_marks.append(mark)
-                subjects[subject_name] = mark
+
+                index = key.split("_")[-1]
+                subject_name = request.form.get(f"subject_name_{index}")
+
+                if subject_name:
+                    subjects[subject_name] = mark
 
     if len(subject_marks) < 3:
         return "Enter at least 3 subjects"
 
-    # ===== Calculate average =====
+    # ================= CALCULATIONS =================
 
     avg_marks = int(sum(subject_marks) / len(subject_marks))
+    max_marks = max(subject_marks)
 
-    # ===== ML Prediction =====
+    # ================= ML PREDICTION =================
 
     try:
-        final_score = float(
-            predict_performance(course, avg_marks, study_hours)
-        )
+        final_score = float(predict_performance(course, avg_marks, study_hours))
     except Exception as e:
         return f"Prediction error: {str(e)}"
 
     expected_mark = round(final_score, 2)
 
-    # ===== Performance Label =====
+    # ================= RESULT LABEL =================
 
     if final_score >= 65:
         prediction = "Excellent 🏆"
@@ -164,6 +138,29 @@ def predict():
     else:
         prediction = "Needs Improvement ⚠️"
 
+    # ================= SAVE STUDENT =================
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO students (course, avg_marks, study_hours, final_score)
+            VALUES (%s,%s,%s,%s)
+            """,
+            (course, avg_marks, study_hours, final_score)
+        )
+
+        conn.commit()
+
+    except mysql.connector.Error as err:
+        print("Database Error:", err)
+
+    finally:
+        cursor.close()
+        conn.close()
+
     # ================= IMPROVEMENT PLAN =================
 
     improvement_plan = {}
@@ -173,15 +170,12 @@ def predict():
         if mark < 30:
             extra_hours = 2
             expected = "45+"
-
         elif mark < 45:
             extra_hours = 1.5
             expected = "50+"
-
         elif mark < 60:
             extra_hours = 1
             expected = "65+"
-
         else:
             extra_hours = 0.5
             expected = "70+"
@@ -192,12 +186,9 @@ def predict():
             "expected": expected
         }
 
-    # ================= WEEKLY STUDY PLAN =================
+    # ================= WEEKLY TIMETABLE =================
 
-    days = [
-        "Monday","Tuesday","Wednesday",
-        "Thursday","Friday","Saturday","Sunday"
-    ]
+    days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
 
     weekly_timetable = {}
 
@@ -209,10 +200,8 @@ def predict():
 
         if mark < 45:
             weak.append(subject)
-
         elif mark < 60:
             medium.append(subject)
-
         else:
             strong.append(subject)
 
@@ -241,11 +230,8 @@ def predict():
 
     weakest_subject = min(subjects, key=subjects.get)
 
-    # ================= SHOW RESULT PAGE =================
-
     return render_template(
         "result.html",
-        level=level,
         course=course,
         final_score=round(final_score,2),
         expected_mark=expected_mark,
@@ -254,6 +240,7 @@ def predict():
         weekly_timetable=weekly_timetable,
         weakest_subject=weakest_subject
     )
+
 
 
 # ================= RUN APP =================
