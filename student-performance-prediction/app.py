@@ -13,20 +13,7 @@ CORS(app)
 # ================= DATABASE CONNECTION =================
 
 def get_connection():
-    try:
-        conn = mysql.connector.connect(
-            host="sql201.infinityfree.com",
-            user="if0_41338440",
-            password="copycat2026",
-            database="if0_41338440_student_prediction",
-            connection_timeout=5
-        )
-        return conn
-    except mysql.connector.Error as err:
-        print("Database connection error:", err)
-        return None
-
-
+    
 # ================= SEARCH COURSES =================
 
 @app.route("/search_courses")
