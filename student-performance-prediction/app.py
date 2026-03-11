@@ -1,5 +1,4 @@
 
-import psycopg2
 import os
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -9,76 +8,6 @@ app = Flask(__name__)
 
 # Allow frontend requests
 CORS(app)
-
-def get_connection():
-    return mysql.connector.connect(
-        host="sql201.infinityfree.com",
-        user="if0_41338440",
-        password="copycat2026",
-        database="if0_41338440_student_prediction"
-    )
-
-# ================= SEARCH COURSES =================
-
-@app.route("/search_courses")
-def search_courses():
-
-    query = request.args.get("query", "")
-    level = request.args.get("level", "")
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    sql = """
-    SELECT course_name
-    FROM courses
-    JOIN academic_levels
-    ON courses.level_id = academic_levels.id
-    WHERE academic_levels.level_name=%s
-    AND course_name LIKE %s
-    """
-
-    cursor.execute(sql, (level, f"%{query}%"))
-    data = cursor.fetchall()
-
-    result = [{"course_name": row[0]} for row in data]
-
-    cursor.close()
-    conn.close()
-
-    return jsonify(result)
-
-
-# ================= SEARCH SUBJECTS =================
-
-@app.route("/search_subjects")
-def search_subjects():
-
-    query = request.args.get("query", "")
-    course = request.args.get("course", "")
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    sql = """
-    SELECT subject_name
-    FROM subjects
-    JOIN courses
-    ON subjects.course_id = courses.id
-    WHERE courses.course_name=%s
-    AND subject_name LIKE %s
-    """
-
-    cursor.execute(sql, (course, f"%{query}%"))
-    data = cursor.fetchall()
-
-    result = [{"subject_name": row[0]} for row in data]
-
-    cursor.close()
-    conn.close()
-
-    return jsonify(result)
-
 
 # ================= PREDICT =================
 
