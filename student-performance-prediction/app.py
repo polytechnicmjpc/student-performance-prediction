@@ -1,74 +1,50 @@
-import os
-import mysql.connector
-from flask import Flask, request, render_template
-from flask_cors import CORS
-from model import predict_performance
-
-app = Flask(__name__)
-CORS(app)
-
-# ================= DATABASE CONNECTION =================
-
-def get_connection():
-    return mysql.connector.connect(
-        host="sql201.infinityfree.com",
-        user="if0_41338440",
-        password="copycat2026",
-        database="if0_41338440_student_prediction"
-    )
-
-# ================= PREDICT =================
-
 @app.route("/predict", methods=["POST"])
 def predict():
 
-    level = request.form.get("level")
-    course = request.form.get("course")
-    study_hours = request.form.get("study_hours")
+    data = request.get_json(force=True)
 
-    if study_hours is None or study_hours == "":
-        return "Study hours required"
-
-    study_hours = float(study_hours)
+    level = data.get("level")
+    course = data.get("course")
+    study_hours = float(data.get("study_hours",0))
 
     subjects = {}
     subject_marks = []
 
-    for key in request.form:
+    for key,value in data.items():
 
-        if "subject_mark_" in key:
+        if "subject_mark_" in key and value!="":
 
-            mark = request.form.get(key)
+            mark = float(value)
+            subject_marks.append(mark)
 
-            if mark and mark != "":
-                mark = float(mark)
+            index = key.split("_")[-1]
+            subject_name = data.get(f"subject_name_{index}")
 
-                subject_marks.append(mark)
+            if subject_name:
+                subjects[subject_name] = mark
 
-                index = key.split("_")[-1]
-                subject_name = request.form.get(f"subject_name_{index}")
-
-                if subject_name:
-                    subjects[subject_name] = mark
 
     if len(subject_marks) < 3:
-        return "Enter at least 3 subjects"
+        return jsonify({"error":"Enter at least 3 subjects"})
 
-    # ================= CALCULATIONS =================
 
-    avg_marks = int(sum(subject_marks) / len(subject_marks))
-    max_marks = max(subject_marks)
+    # ===== CALCULATIONS =====
 
-    # ================= ML PREDICTION =================
+    avg_marks = sum(subject_marks) / len(subject_marks)
+
+
+    # ===== ML PREDICTION =====
 
     try:
-        final_score = float(predict_performance(course, avg_marks, study_hours))
+        final_score = predict_performance(course, avg_marks, study_hours)
     except Exception as e:
-        return f"Prediction error: {str(e)}"
+        return jsonify({"error":str(e)})
 
-    expected_mark = round(final_score, 2)
 
-    # ================= RESULT LABEL =================
+    expected_mark = round(final_score,2)
+
+
+    # ===== RESULT LABEL =====
 
     if final_score >= 65:
         prediction = "Excellent 🏆"
@@ -81,37 +57,12 @@ def predict():
     else:
         prediction = "Needs Improvement ⚠️"
 
-    # ================= SAVE STUDENT =================
 
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO students (course, avg_marks, study_hours, final_score)
-            VALUES (%s,%s,%s,%s)
-            """,
-            (course, avg_marks, study_hours, final_score)
-        )
-
-        conn.commit()
-
-    except mysql.connector.Error as err:
-        print("Database Error:", err)
-
-    finally:
-        try:
-            cursor.close()
-            conn.close()
-        except:
-            pass
-
-    # ================= IMPROVEMENT PLAN =================
+    # ===== IMPROVEMENT PLAN =====
 
     improvement_plan = {}
 
-    for subject, mark in subjects.items():
+    for subject,mark in subjects.items():
 
         if mark < 30:
             extra_hours = 2
@@ -132,16 +83,18 @@ def predict():
             "expected": expected
         }
 
-    # ================= WEEKLY TIMETABLE =================
+
+    # ===== WEEKLY TIMETABLE =====
 
     days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+
     weekly_timetable = {}
 
-    weak = []
-    medium = []
-    strong = []
+    weak=[]
+    medium=[]
+    strong=[]
 
-    for subject, mark in subjects.items():
+    for subject,mark in subjects.items():
 
         if mark < 45:
             weak.append(subject)
@@ -149,6 +102,7 @@ def predict():
             medium.append(subject)
         else:
             strong.append(subject)
+
 
     for day in days:
 
@@ -162,33 +116,25 @@ def predict():
             weekly_timetable[day].append("Mock Test")
             continue
 
-        for subject in weak:
-            weekly_timetable[day].append(f"{subject} - 2 hrs")
+        for s in weak:
+            weekly_timetable[day].append(f"{s} - 2 hrs")
 
         if day in ["Monday","Wednesday","Friday"]:
-            for subject in medium:
-                weekly_timetable[day].append(f"{subject} - 1.5 hrs")
+            for s in medium:
+                weekly_timetable[day].append(f"{s} - 1.5 hrs")
 
         if day in ["Tuesday","Thursday"]:
-            for subject in strong:
-                weekly_timetable[day].append(f"{subject} - 1 hr")
+            for s in strong:
+                weekly_timetable[day].append(f"{s} - 1 hr")
 
-    weakest_subject = min(subjects, key=subjects.get)
 
-    return render_template(
-        "result.html",
-        course=course,
-        final_score=round(final_score,2),
-        expected_mark=expected_mark,
-        prediction=prediction,
-        improvement_plan=improvement_plan,
-        weekly_timetable=weekly_timetable,
-        weakest_subject=weakest_subject
-    )
+    return jsonify({
 
-# ================= RUN APP =================
+        "course":course,
+        "final_score":round(final_score,2),
+        "prediction":prediction,
+        "expected_mark":expected_mark,
+        "improvement_plan":improvement_plan,
+        "weekly_timetable":weekly_timetable
 
-if __name__ == "__main__":
-
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    })
