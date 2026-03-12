@@ -155,19 +155,17 @@ def predict():
     weakest_subject = min(subjects, key=subjects.get)
 
 
-    # Return JSON instead of HTML
-    return jsonify({
-
-        "course": course,
-        "final_score": round(final_score, 2),
-        "expected_mark": expected_mark,
-        "prediction": prediction,
-        "weakest_subject": weakest_subject,
-        "improvement_plan": improvement_plan,
-        "weekly_timetable": weekly_timetable
-
-    })
-
+   # Render the HTML result page with all data
+    return render_template(
+        "result.html",
+        course=course,
+        final_score=round(final_score, 2),
+        expected_mark=expected_mark,
+        prediction=prediction,
+        improvement_plan=improvement_plan,
+        weekly_timetable=weekly_timetable,
+        weakest_subject=weakest_subject
+    )
 
 # ================= RUN =================
 
