@@ -1,50 +1,75 @@
+import numpy as np
+from flask import Flask, request, jsonify
+from model import predict_performance
+
+app = Flask(__name__)
+
+# ================= HOME =================
+
+@app.route("/")
+def home():
+    return "Student Performance Prediction API Running"
+
+
+# ================= PREDICT =================
+
 @app.route("/predict", methods=["POST"])
 def predict():
 
+    # Receive JSON from predict.php
     data = request.get_json(force=True)
 
     level = data.get("level")
     course = data.get("course")
-    study_hours = float(data.get("study_hours",0))
+    study_hours = data.get("study_hours")
+
+    if study_hours is None or study_hours == "":
+        return jsonify({"error": "Study hours required"})
+
+    study_hours = float(study_hours)
 
     subjects = {}
     subject_marks = []
 
-    for key,value in data.items():
+    # Collect subject marks
+    for key in data:
 
-        if "subject_mark_" in key and value!="":
+        if "subject_mark_" in key:
 
-            mark = float(value)
-            subject_marks.append(mark)
+            mark = data.get(key)
 
-            index = key.split("_")[-1]
-            subject_name = data.get(f"subject_name_{index}")
+            if mark and mark != "":
 
-            if subject_name:
-                subjects[subject_name] = mark
+                mark = float(mark)
+                subject_marks.append(mark)
 
+                index = key.split("_")[-1]
+                subject_name = data.get(f"subject_name_{index}")
+
+                if subject_name:
+                    subjects[subject_name] = mark
 
     if len(subject_marks) < 3:
-        return jsonify({"error":"Enter at least 3 subjects"})
+        return jsonify({"error": "Enter at least 3 subjects"})
 
 
-    # ===== CALCULATIONS =====
+    # ================= CALCULATIONS =================
 
     avg_marks = sum(subject_marks) / len(subject_marks)
 
 
-    # ===== ML PREDICTION =====
+    # ================= ML PREDICTION =================
 
     try:
         final_score = predict_performance(course, avg_marks, study_hours)
     except Exception as e:
-        return jsonify({"error":str(e)})
+        return jsonify({"error": str(e)})
 
 
-    expected_mark = round(final_score,2)
+    expected_mark = round(final_score, 2)
 
 
-    # ===== RESULT LABEL =====
+    # ================= RESULT LABEL =================
 
     if final_score >= 65:
         prediction = "Excellent 🏆"
@@ -58,11 +83,11 @@ def predict():
         prediction = "Needs Improvement ⚠️"
 
 
-    # ===== IMPROVEMENT PLAN =====
+    # ================= IMPROVEMENT PLAN =================
 
     improvement_plan = {}
 
-    for subject,mark in subjects.items():
+    for subject, mark in subjects.items():
 
         if mark < 30:
             extra_hours = 2
@@ -84,17 +109,17 @@ def predict():
         }
 
 
-    # ===== WEEKLY TIMETABLE =====
+    # ================= WEEKLY TIMETABLE =================
 
     days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
 
     weekly_timetable = {}
 
-    weak=[]
-    medium=[]
-    strong=[]
+    weak = []
+    medium = []
+    strong = []
 
-    for subject,mark in subjects.items():
+    for subject, mark in subjects.items():
 
         if mark < 45:
             weak.append(subject)
@@ -102,7 +127,6 @@ def predict():
             medium.append(subject)
         else:
             strong.append(subject)
-
 
     for day in days:
 
@@ -116,25 +140,36 @@ def predict():
             weekly_timetable[day].append("Mock Test")
             continue
 
-        for s in weak:
-            weekly_timetable[day].append(f"{s} - 2 hrs")
+        for subject in weak:
+            weekly_timetable[day].append(f"{subject} - 2 hrs")
 
         if day in ["Monday","Wednesday","Friday"]:
-            for s in medium:
-                weekly_timetable[day].append(f"{s} - 1.5 hrs")
+            for subject in medium:
+                weekly_timetable[day].append(f"{subject} - 1.5 hrs")
 
         if day in ["Tuesday","Thursday"]:
-            for s in strong:
-                weekly_timetable[day].append(f"{s} - 1 hr")
+            for subject in strong:
+                weekly_timetable[day].append(f"{subject} - 1 hr")
 
 
+    weakest_subject = min(subjects, key=subjects.get)
+
+
+    # Return JSON instead of HTML
     return jsonify({
 
-        "course":course,
-        "final_score":round(final_score,2),
-        "prediction":prediction,
-        "expected_mark":expected_mark,
-        "improvement_plan":improvement_plan,
-        "weekly_timetable":weekly_timetable
+        "course": course,
+        "final_score": round(final_score, 2),
+        "expected_mark": expected_mark,
+        "prediction": prediction,
+        "weakest_subject": weakest_subject,
+        "improvement_plan": improvement_plan,
+        "weekly_timetable": weekly_timetable
 
     })
+
+
+# ================= RUN =================
+
+if __name__ == "__main__":
+    app.run()
