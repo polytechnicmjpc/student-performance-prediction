@@ -1,91 +1,23 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request
 from flask_cors import CORS
-import mysql.connector
+from pymongo import MongoClient
 from model import predict_performance
 from retrain_model import retrain_model
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 
-# ================= DATABASE CONNECTION =================
-def get_connection():
-    try:
-        conn = mysql.connector.connect(
-            host="sql201.infinityfree.com",
-            user="if0_41338440",
-            password="copycat2026",
-            database="if0_41338440_student_prediction",
-            port=3306
-        )
-        return conn
-    except Exception as e:
-        print("Database Connection Error:", e)
-        return None
-
+# ================= MONGODB CONNECTION =================
+client = MongoClient("mongodb+srv://USERNAME:PASSWORD@cluster.mongodb.net/")
+db = client["student_prediction"]
+students_collection = db["students"]
 
 # ================= HOME =================
 @app.route("/")
 def home():
     return render_template("home.html")
-
-
-# ================= SEARCH COURSES =================
-@app.route("/search_courses")
-def search_courses():
-    query = request.args.get("query", "")
-    level = request.args.get("level", "")
-
-    conn = get_connection()
-    if conn is None:
-        return jsonify([])
-
-    cursor = conn.cursor()
-
-    sql = """
-    SELECT course_name
-    FROM courses
-    JOIN academic_levels ON courses.level_id = academic_levels.id
-    WHERE academic_levels.level_name=%s AND course_name LIKE %s
-    """
-
-    cursor.execute(sql, (level, f"%{query}%"))
-    data = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
-
-    result = [{"course_name": row[0]} for row in data]
-    return jsonify(result)
-
-
-# ================= SEARCH SUBJECTS =================
-@app.route("/search_subjects")
-def search_subjects():
-    query = request.args.get("query", "")
-    course = request.args.get("course", "")
-
-    conn = get_connection()
-    if conn is None:
-        return jsonify([])
-
-    cursor = conn.cursor()
-
-    sql = """
-    SELECT subject_name
-    FROM subjects
-    JOIN courses ON subjects.course_id = courses.id
-    WHERE courses.course_name=%s AND subject_name LIKE %s
-    """
-
-    cursor.execute(sql, (course, f"%{query}%"))
-    data = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
-
-    result = [{"subject_name": row[0]} for row in data]
-    return jsonify(result)
 
 
 # ================= PREDICT =================
@@ -119,7 +51,6 @@ def predict():
             series2 = float(series2)
 
             avg_mark = (series1 + series2) / 2
-
             subjects[subject_name] = avg_mark
             subject_marks.append(avg_mark)
 
@@ -151,35 +82,29 @@ def predict():
     else:
         prediction = "Needs Improvement ⚠️"
 
-    # ================= SAVE STUDENT DATA =================
+    # ================= SAVE STUDENT DATA (MongoDB) =================
     try:
-        conn = get_connection()
 
-        if conn:
-            cursor = conn.cursor()
+        student_data = {
+            "level": level,
+            "course": course,
+            "subjects": subjects,
+            "avg_marks": avg_marks,
+            "study_hours": study_hours,
+            "predicted_score": final_score,
+            "created_at": datetime.utcnow()
+        }
 
-            cursor.execute(
-                """
-                INSERT INTO students 
-                (course, avg_marks, study_hours, final_score)
-                VALUES (%s,%s,%s,%s)
-                """,
-                (course, avg_marks, study_hours, final_score)
-            )
+        students_collection.insert_one(student_data)
 
-            conn.commit()
-
-            cursor.close()
-            conn.close()
-
-            # Auto retrain (safe)
-            try:
-                retrain_model()
-            except Exception as e:
-                print("Retrain Error:", e)
+        # Retrain model automatically
+        try:
+            retrain_model()
+        except Exception as e:
+            print("Retrain error:", e)
 
     except Exception as e:
-        print("Database Insert Error:", e)
+        print("MongoDB Insert Error:", e)
 
     # ================= IMPROVEMENT PLAN =================
     improvement_plan = {}
@@ -210,8 +135,8 @@ def predict():
 
     # ================= WEEKLY TIMETABLE =================
     days = [
-        "Monday", "Tuesday", "Wednesday",
-        "Thursday", "Friday", "Saturday", "Sunday"
+        "Monday","Tuesday","Wednesday",
+        "Thursday","Friday","Saturday","Sunday"
     ]
 
     weak = []
@@ -248,13 +173,13 @@ def predict():
                 f"{subject} - {improvement_plan[subject]['extra_hours']} hrs/day"
             )
 
-        if day in ["Monday", "Wednesday", "Friday"]:
+        if day in ["Monday","Wednesday","Friday"]:
             for subject in medium:
                 weekly_timetable[day].append(
                     f"{subject} - {improvement_plan[subject]['extra_hours']} hrs/day"
                 )
 
-        if day in ["Tuesday", "Thursday"]:
+        if day in ["Tuesday","Thursday"]:
             for subject in strong:
                 weekly_timetable[day].append(
                     f"{subject} - {improvement_plan[subject]['extra_hours']} hrs/day"
@@ -267,7 +192,7 @@ def predict():
         "result.html",
         level=level,
         course=course,
-        final_score=round(final_score, 2),
+        final_score=round(final_score,2),
         expected_mark=expected_mark,
         prediction=prediction,
         improvement_plan=improvement_plan,
@@ -276,7 +201,7 @@ def predict():
     )
 
 
-# ================= OPTIONAL RETRAIN =================
+# ================= MANUAL RETRAIN =================
 @app.route("/retrain")
 def retrain():
     try:
@@ -286,7 +211,7 @@ def retrain():
         return f"Retrain failed: {str(e)}"
 
 
-# ================= RUN SERVER =================
+# ================= RUN =================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT",5000))
     app.run(host="0.0.0.0", port=port, debug=True)
