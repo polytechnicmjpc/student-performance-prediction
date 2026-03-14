@@ -13,10 +13,10 @@ CORS(app)
 # ================= DATABASE CONNECTION =================
 def get_connection():
     return mysql.connector.connect(
-        host="sqlXXX.infinityfree.com",       # replace with your host
-        user="epizXXXXXX",                    # replace with your DB user
-        password="YOUR_DB_PASSWORD",          # replace with your DB password
-        database="epizXXXXXX_student_prediction"  # replace with your DB name
+        host="sql201.infinityfree.com",
+        user="if0_41338440",
+        password="copycat2026",
+        database="if0_41338440_student_prediction"
     )
 
 # ================= HOME =================
