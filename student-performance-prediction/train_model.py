@@ -11,10 +11,10 @@ def retrain_model():
     # ================= DATABASE CONNECTION =================
 
     conn = mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="",
-        database="student_prediction"
+        host="sql201.infinityfree.com",
+        user="if0_41338440",
+        password="copycat2026",
+        database="if0_41338440_student_prediction"
     )
 
     # ================= LOAD DATA =================
@@ -25,7 +25,6 @@ def retrain_model():
     """
 
     df = pd.read_sql(query, conn)
-
     conn.close()
 
     print("Training Data Loaded:")
@@ -60,9 +59,13 @@ def retrain_model():
 
     # ================= SAVE MODEL =================
 
-    joblib.dump(model, "models/model.pkl")
-    joblib.dump(encoder, "models/encoder.pkl")
+     os.makedirs("models", exist_ok=True)
+        joblib.dump(model, "models/model.pkl")
+        joblib.dump(encoder, "models/encoder.pkl")
 
     print("\n✅ Model retrained successfully")
     print("✅ models/model.pkl saved")
     print("✅ models/encoder.pkl saved")
+
+ except Exception as e:
+        print("❌ Retrain error:", e)
