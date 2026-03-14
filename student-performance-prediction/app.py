@@ -10,7 +10,7 @@ app = Flask(__name__)
 CORS(app)
 
 # ================= MONGODB CONNECTION =================
-client = MongoClient("mongodb+srv://USERNAME:PASSWORD@cluster.mongodb.net/")
+client = MongoClient("mongodb+srv://studentadmin:copycat2026@cluster0.eu4t0uq.mongodb.net/?appName=Cluster0")
 db = client["student_prediction"]
 students_collection = db["students"]
 
