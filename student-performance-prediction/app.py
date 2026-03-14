@@ -5,29 +5,26 @@ from flask_cors import CORS
 import mysql.connector
 from model import predict_performance
 from retrain_model import retrain_model
+import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend hosted on InfinityFree
+CORS(app)
 
 # ================= DATABASE CONNECTION =================
-
 def get_connection():
-    # Update these credentials with your InfinityFree MySQL info
     return mysql.connector.connect(
-        host="sql201.infinityfree.com",         # Replace with your host
-        user="if0_41338440",                      # Replace with your DB user
-        password="copycat2026",            # Replace with your DB password
-        database="if0_41338440_student_prediction"  # Replace with your DB name
+        host="sqlXXX.infinityfree.com",       # replace with your host
+        user="epizXXXXXX",                    # replace with your DB user
+        password="YOUR_DB_PASSWORD",          # replace with your DB password
+        database="epizXXXXXX_student_prediction"  # replace with your DB name
     )
 
 # ================= HOME =================
-
 @app.route("/")
 def home():
-    return render_template("home.html")  # You can rename home.html as needed
+    return render_template("home.html")
 
 # ================= SEARCH COURSES =================
-
 @app.route("/search_courses")
 def search_courses():
     query = request.args.get("query", "")
@@ -35,26 +32,20 @@ def search_courses():
 
     conn = get_connection()
     cursor = conn.cursor()
-
     sql = """
     SELECT course_name
     FROM courses
     JOIN academic_levels ON courses.level_id = academic_levels.id
-    WHERE academic_levels.level_name=%s
-    AND course_name LIKE %s
+    WHERE academic_levels.level_name=%s AND course_name LIKE %s
     """
     cursor.execute(sql, (level, f"%{query}%"))
     data = cursor.fetchall()
-
-    result = [{"course_name": row[0]} for row in data]
-
     cursor.close()
     conn.close()
-
+    result = [{"course_name": row[0]} for row in data]
     return jsonify(result)
 
 # ================= SEARCH SUBJECTS =================
-
 @app.route("/search_subjects")
 def search_subjects():
     query = request.args.get("query", "")
@@ -62,40 +53,31 @@ def search_subjects():
 
     conn = get_connection()
     cursor = conn.cursor()
-
     sql = """
     SELECT subject_name
     FROM subjects
     JOIN courses ON subjects.course_id = courses.id
-    WHERE courses.course_name=%s
-    AND subject_name LIKE %s
+    WHERE courses.course_name=%s AND subject_name LIKE %s
     """
     cursor.execute(sql, (course, f"%{query}%"))
     data = cursor.fetchall()
-
-    result = [{"subject_name": row[0]} for row in data]
-
     cursor.close()
     conn.close()
-
+    result = [{"subject_name": row[0]} for row in data]
     return jsonify(result)
 
 # ================= PREDICT =================
-
 @app.route("/predict", methods=["POST"])
 def predict():
     level = request.form.get("level")
     course = request.form.get("course")
     study_hours = request.form.get("study_hours")
-
-    if study_hours is None or study_hours == "":
+    if not study_hours:
         return "Study hours required"
     study_hours = float(study_hours)
 
     subjects = {}
     subject_marks = []
-
-    # ================= READ SERIES MARKS =================
     i = 0
     while True:
         subject_name = request.form.get(f"subject_name_{i}")
@@ -110,21 +92,16 @@ def predict():
             subjects[subject_name] = avg_mark
             subject_marks.append(avg_mark)
         i += 1
-
     if len(subject_marks) < 3:
         return "Enter at least 3 subjects"
-
     avg_marks = int(sum(subject_marks) / len(subject_marks))
 
-    # ================= ML PREDICTION =================
     try:
         final_score = float(predict_performance(course, avg_marks, study_hours))
     except Exception as e:
         return f"Prediction error: {str(e)}"
 
     expected_mark = round(final_score, 2)
-
-    # ================= RESULT LABEL =================
     if final_score >= 65:
         prediction = "Excellent 🏆"
     elif final_score >= 55:
@@ -136,27 +113,21 @@ def predict():
     else:
         prediction = "Needs Improvement ⚠️"
 
-    # ================= SAVE STUDENT & AUTO RETRAIN =================
+    # ================= SAVE STUDENT & RETRAIN =================
     try:
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            """
-            INSERT INTO students (course, avg_marks, study_hours, final_score)
-            VALUES (%s,%s,%s,%s)
-            """,
+            "INSERT INTO students (course, avg_marks, study_hours, final_score) VALUES (%s,%s,%s,%s)",
             (course, avg_marks, study_hours, final_score)
         )
         conn.commit()
-
-        # Auto retrain model after new record added
-        retrain_model()
-
-    except mysql.connector.Error as err:
-        print("Database Error:", err)
-    finally:
         cursor.close()
         conn.close()
+        # Auto retrain
+        retrain_model()
+    except Exception as e:
+        print("Database Error:", e)
 
     # ================= IMPROVEMENT PLAN =================
     improvement_plan = {}
@@ -173,16 +144,13 @@ def predict():
         else:
             extra_hours = 0.5
             expected = "70+ / 75"
-        improvement_plan[subject] = {
-            "mark": f"{int(mark)} / 40",
-            "extra_hours": extra_hours,
-            "expected": expected
-        }
+        improvement_plan[subject] = {"mark": f"{int(mark)} / 40",
+                                     "extra_hours": extra_hours,
+                                     "expected": expected}
 
     # ================= WEEKLY TIMETABLE =================
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     weak, medium, strong = [], [], []
-
     for subject, mark in subjects.items():
         if mark < 15:
             weak.append(subject)
@@ -190,7 +158,6 @@ def predict():
             medium.append(subject)
         else:
             strong.append(subject)
-
     weekly_timetable = {}
     for day in days:
         weekly_timetable[day] = []
@@ -201,30 +168,24 @@ def predict():
             weekly_timetable[day].append("Mock Test")
             continue
         for subject in weak:
-            extra_hours = improvement_plan[subject]["extra_hours"]
-            weekly_timetable[day].append(f"{subject} - {extra_hours} hrs/day")
+            weekly_timetable[day].append(f"{subject} - {improvement_plan[subject]['extra_hours']} hrs/day")
         if day in ["Monday", "Wednesday", "Friday"]:
             for subject in medium:
-                extra_hours = improvement_plan[subject]["extra_hours"]
-                weekly_timetable[day].append(f"{subject} - {extra_hours} hrs/day")
+                weekly_timetable[day].append(f"{subject} - {improvement_plan[subject]['extra_hours']} hrs/day")
         if day in ["Tuesday", "Thursday"]:
             for subject in strong:
-                extra_hours = improvement_plan[subject]["extra_hours"]
-                weekly_timetable[day].append(f"{subject} - {extra_hours} hrs/day")
-
+                weekly_timetable[day].append(f"{subject} - {improvement_plan[subject]['extra_hours']} hrs/day")
     weakest_subject = min(subjects, key=subjects.get)
 
-    return render_template(
-        "result.html",
-        level=level,
-        course=course,
-        final_score=round(final_score, 2),
-        expected_mark=expected_mark,
-        prediction=prediction,
-        improvement_plan=improvement_plan,
-        weekly_timetable=weekly_timetable,
-        weakest_subject=weakest_subject
-    )
+    return render_template("result.html",
+                           level=level,
+                           course=course,
+                           final_score=round(final_score, 2),
+                           expected_mark=expected_mark,
+                           prediction=prediction,
+                           improvement_plan=improvement_plan,
+                           weekly_timetable=weekly_timetable,
+                           weakest_subject=weakest_subject)
 
 # ================= OPTIONAL RETRAIN ENDPOINT =================
 @app.route("/retrain")
@@ -234,5 +195,5 @@ def retrain():
 
 # ================= RUN =================
 if __name__ == "__main__":
-    # Use debug=True only for development
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
