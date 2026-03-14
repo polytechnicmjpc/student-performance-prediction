@@ -6,71 +6,63 @@ import joblib
 import os
 
 
-# ================= DATABASE CONNECTION =================
+def retrain_model():
 
-conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="",
-    database="student_prediction"
-)
+    # ================= DATABASE CONNECTION =================
 
+    conn = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="",
+        database="student_prediction"
+    )
 
-# ================= LOAD DATA FROM DATABASE =================
+    # ================= LOAD DATA =================
 
-query = """
-SELECT course, avg_marks, study_hours, final_score
-FROM students
-"""
+    query = """
+    SELECT course, avg_marks, study_hours, final_score
+    FROM students
+    """
 
-df = pd.read_sql(query, conn)
+    df = pd.read_sql(query, conn)
 
-conn.close()
+    conn.close()
 
-print("Training Data Loaded:")
-print(df)
+    print("Training Data Loaded:")
+    print(df)
 
+    # ================= CHECK DATA =================
 
-# ================= CHECK DATA =================
+    if df.empty or len(df) < 5:
+        print("❌ Not enough student data for training")
+        return
 
-if df.empty:
-    print("❌ No student data found in database")
-    exit()
+    # ================= ENCODE COURSE =================
 
+    encoder = LabelEncoder()
 
-# ================= ENCODE COURSE =================
+    df["course_encoded"] = encoder.fit_transform(df["course"])
 
-encoder = LabelEncoder()
+    # ================= FEATURES & TARGET =================
 
-df["course_encoded"] = encoder.fit_transform(df["course"])
+    X = df[["course_encoded", "avg_marks", "study_hours"]]
+    y = df["final_score"]
 
+    # ================= TRAIN MODEL =================
 
-# ================= FEATURES & TARGET =================
+    model = LinearRegression()
 
-X = df[["course_encoded", "avg_marks", "study_hours"]]
+    model.fit(X, y)
 
-y = df["final_score"]
+    # ================= CREATE MODELS FOLDER =================
 
+    os.makedirs("models", exist_ok=True)
 
-# ================= TRAIN MODEL =================
+    # ================= SAVE MODEL =================
 
-model = LinearRegression()
+    joblib.dump(model, "models/model.pkl")
+    joblib.dump(encoder, "models/encoder.pkl")
 
-model.fit(X, y)
-
-
-# ================= CREATE MODELS FOLDER =================
-
-os.makedirs("models", exist_ok=True)
-
-
-# ================= SAVE MODEL =================
-
-joblib.dump(model, "models/model.pkl")
-
-joblib.dump(encoder, "models/encoder.pkl")
-
-
-print("\n✅ Model trained successfully")
-print("✅ models/model.pkl saved")
-print("✅ models/encoder.pkl saved")
+    print("\n✅ Model retrained successfully")
+    print("✅ models/model.pkl saved")
+    print("✅ models/encoder.pkl saved")
