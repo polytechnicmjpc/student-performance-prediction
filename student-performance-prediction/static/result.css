@@ -60,7 +60,8 @@ table {
 /* Header */
 th {
     padding: 14px;
-    text-align: left;
+    text-align: center;   /* Center all header text */
+    font-weight: bold;    /* Bold text */
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(14px);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
@@ -69,7 +70,7 @@ th {
     letter-spacing: 0.5px;
 }
 
-/* Body Cells */
+/* Body Cells */ 
 td {
     padding: 12px;
     font-size: 14px;
