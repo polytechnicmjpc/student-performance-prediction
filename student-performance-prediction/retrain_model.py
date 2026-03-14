@@ -13,7 +13,7 @@ def retrain_model():
     try:
         # ================= MONGODB CONNECTION =================
         client = MongoClient(
-            "mongodb+srv://USERNAME:PASSWORD@cluster0.mongodb.net/?retryWrites=true&w=majority"
+            "mongodb+srv://studentadmin:copycat2026@cluster0.eu4t0uq.mongodb.net/?appName=Cluster0"
         )
 
         db = client["student_prediction"]
