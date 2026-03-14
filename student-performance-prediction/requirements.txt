@@ -1,8 +1,8 @@
 flask
 flask-cors
 mysql-connector-python
-numpy
 pandas
 scikit-learn
+numpy
 joblib
 gunicorn
